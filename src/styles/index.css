@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-app-bg: #000000;
+  --color-panel-bg: #1E1E1E;
+  --color-element-bg: #3A3A3C;
+  --color-element-hover: #48484A;
+  --color-element-active: #2C2C2E;
+  --color-input-bg: #151515;
+  --color-system-blue: #0060FA;
+  --color-segmented-active: #636366;
+  --color-border-black: #000000;
+  
+  --color-google-dark-bg: var(--color-panel-bg);
+  --color-google-dark-surface: #2C2C2E;
+  --color-google-dark-border: var(--color-border-black);
+  --color-google-blue: var(--color-system-blue);
+  --color-google-light-bg: #f8f9fa;
+  --color-google-light-surface: #ffffff;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  @apply bg-google-light-bg dark:bg-app-bg text-slate-900 dark:text-slate-200;
+  overflow: hidden;
+}
+
+/* Custom scrollbar for panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8; /* slate-400 */
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569; /* slate-600 */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b; /* slate-500 */
+}
+
+/* Hide number input spinners */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
