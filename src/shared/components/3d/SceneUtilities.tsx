@@ -69,7 +69,16 @@ export const SnapshotManager = ({
     if (!actionRef) return;
 
     actionRef.current = () => {
-      // 1. Hide Gizmos, Grid and Helpers
+      // 1. Capture current state
+      const width = gl.domElement.clientWidth;
+      const height = gl.domElement.clientHeight;
+      const originalPixelRatio = gl.getPixelRatio();
+      const originalSize = new THREE.Vector2();
+      gl.getSize(originalSize);
+      const originalBackground = scene.background;
+      const originalFog = scene.fog;
+
+      // 2. Hide Gizmos, Grid and Helpers
       const hiddenObjects: THREE.Object3D[] = [];
       scene.traverse((obj) => {
         if (obj.userData.isGizmo ||
@@ -85,28 +94,127 @@ export const SnapshotManager = ({
         }
       });
 
-      // 2. Clear background for transparency
-      const originalBackground = scene.background;
-      scene.background = null;
+      // 3. Setup Studio Environment (Horizon & Ground)
+      // Studio Color: Pure white for Fusion 360 style clean look
+      const studioColor = new THREE.Color('#ffffff');
+      const fogColor = new THREE.Color('#ffffff');
+      
+      scene.background = studioColor;
+      // Soft fog to blend floor into background (infinite studio look)
+      scene.fog = new THREE.Fog(fogColor, 5, 50);
 
-      // 3. High Res Render
-      const originalPixelRatio = gl.getPixelRatio();
-      gl.setPixelRatio(4); // 4x Super Sampling
+      // Create Infinite-looking Floor (Fusion 360 style)
+      const groundGeo = new THREE.PlaneGeometry(1000, 1000);
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: studioColor,
+        roughness: 0.45, // Semi-gloss floor
+        metalness: 0.1,  // Slight reflectivity
+        envMapIntensity: 1.0,
+      });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      // Align with Z-up system (XY plane is floor)
+      ground.position.set(0, 0, -0.02);
+      ground.receiveShadow = true;
+      scene.add(ground);
 
-      gl.render(scene, camera);
-      const dataUrl = gl.domElement.toDataURL('image/png', 1.0);
+      // 4. Enhance Lighting for Snapshot (Enable Shadows)
+      // Only enable shadows for the main light to avoid multi-shadow artifacts and VRAM issues
+      const modifiedLights: { light: THREE.Light, originalCastShadow: boolean, originalBias: number, originalMapSize: THREE.Vector2 }[] = [];
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.DirectionalLight && obj.intensity > 0) {
+          // Heuristic to identify Main Light (pos: 5,5,5) or similar key lights
+          // Avoid enabling shadows on fill lights (negative X or Z)
+          const isMainLight = obj.position.x > 1 && obj.position.y > 0 && obj.position.z > 0;
 
-      // 4. Restore
-      gl.setPixelRatio(originalPixelRatio);
-      scene.background = originalBackground;
-      hiddenObjects.forEach(obj => obj.visible = true);
-      gl.render(scene, camera);
+          if (isMainLight) {
+            modifiedLights.push({
+              light: obj,
+              originalCastShadow: obj.castShadow,
+              originalBias: obj.shadow.bias,
+              originalMapSize: obj.shadow.mapSize.clone()
+            });
+            
+            obj.castShadow = true;
+            obj.shadow.mapSize.width = 2048; // Standard high quality
+            obj.shadow.mapSize.height = 2048;
+            obj.shadow.bias = -0.00005;
+            obj.shadow.radius = 4; // Soft shadows
+            
+            // Force update shadow map
+            if (obj.shadow.map) {
+              obj.shadow.map.dispose();
+              obj.shadow.map = null;
+            }
+          }
+        }
+      });
 
-      // 5. Download
-      const link = document.createElement('a');
-      link.download = `${robotName}_snapshot.png`;
-      link.href = dataUrl;
-      link.click();
+      // 5. High Res Render Configuration
+      const snapshotScale = 2; // 2x scale (Retina quality) is safe and high-res
+      gl.setPixelRatio(snapshotScale);
+      gl.setSize(width, height, false);
+
+      // Define restore function
+      const restoreState = () => {
+        // Restore Scene
+        scene.remove(ground);
+        groundGeo.dispose();
+        groundMat.dispose();
+        scene.background = originalBackground;
+        scene.fog = originalFog;
+        hiddenObjects.forEach(obj => obj.visible = true);
+
+        // Restore Lights
+        modifiedLights.forEach(({ light, originalCastShadow, originalBias, originalMapSize }) => {
+          light.castShadow = originalCastShadow;
+          light.shadow.bias = originalBias;
+          light.shadow.mapSize.copy(originalMapSize);
+          if (light.shadow.map) light.shadow.map.dispose();
+          light.shadow.map = null;
+        });
+
+        // Restore Renderer
+        gl.setPixelRatio(originalPixelRatio);
+        gl.setSize(originalSize.x, originalSize.y, false);
+        
+        // Trigger a re-render to ensure UI is back to normal
+        gl.render(scene, camera);
+        console.log('[Snapshot] State restored');
+      };
+
+      // 6. Render & Download
+      try {
+        console.log('[Snapshot] Rendering scene...');
+        gl.render(scene, camera);
+        
+        console.log('[Snapshot] Generating blob...');
+        gl.domElement.toBlob((blob) => {
+          if (blob) {
+            console.log(`[Snapshot] Blob generated: ${blob.size} bytes`);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = `${robotName}_snapshot.png`;
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+          } else {
+            console.error('[Snapshot] Blob is null, attempting DataURL fallback');
+            try {
+              const dataUrl = gl.domElement.toDataURL('image/png', 1.0);
+              const link = document.createElement('a');
+              link.download = `${robotName}_snapshot.png`;
+              link.href = dataUrl;
+              link.click();
+            } catch (fallbackErr) {
+              console.error('[Snapshot] Fallback failed:', fallbackErr);
+            }
+          }
+          restoreState();
+        }, 'image/png', 1.0);
+      } catch (e) {
+        console.error('[Snapshot] Render error:', e);
+        restoreState();
+      }
     };
 
     return () => {
