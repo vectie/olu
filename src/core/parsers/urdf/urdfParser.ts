@@ -77,8 +77,8 @@ export const parseURDF = (xmlString: string): RobotState | null => {
         y: isNaN(parts[1]) ? 0 : parts[1], 
         z: isNaN(parts[2]) ? 0 : parts[2] 
     };
-    // Debug logging for suspicious values (all zeros when input wasn't empty)
-    if (result.x === 0 && result.y === 0 && result.z === 0 && str.trim() !== "0 0 0") {
+    // Debug logging for suspicious values (only if parsing failed resulted in NaNs)
+    if (isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
         console.warn(`[URDF] Suspicious Vec3 parsing: "${str}" ->`, result);
     }
     return result;
@@ -126,9 +126,8 @@ export const parseURDF = (xmlString: string): RobotState | null => {
               }
           };
       } else if (capsule) {
-          // Map capsule to cylinder for visualization
           return {
-              type: GeometryType.CYLINDER,
+              type: GeometryType.CAPSULE,
               dimensions: {
                   x: parseFloat(capsule.getAttribute("radius") || "0.1"),
                   y: parseFloat(capsule.getAttribute("length") || "0.5"),
@@ -390,14 +389,6 @@ export const parseURDF = (xmlString: string): RobotState | null => {
                 }
             }
         }
-      }
-
-      if (jointName === 'FR_hip_joint') {
-          console.log(`[URDF] Parsing FR_hip_joint. Found originEl: ${!!originEl}`);
-          if (originEl) {
-              console.log(`[URDF] Origin xyz: "${originEl.getAttribute('xyz')}"`);
-              console.log(`[URDF] Origin rpy: "${originEl.getAttribute('rpy')}"`);
-          }
       }
 
       const axisEl = jointEl.querySelector("axis");
