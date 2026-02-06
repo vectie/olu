@@ -10,6 +10,13 @@ import { offsetRobotToGround } from '../utils/robotPositioning';
 import { SHARED_MATERIALS } from '../constants';
 import { createLoadingManager, createMeshLoader } from '@/core/loaders';
 import { loadMJCFToThreeJS, isMJCFContent } from '@/core/parsers/mjcf';
+import { processCapsuleGeometries } from '../utils/capsulePostProcessor';
+
+function preprocessURDFForLoader(content: string): string {
+    // Remove <transmission> blocks to prevent urdf-loader from finding duplicate joints
+    // which can overwrite valid joints with empty origins
+    return content.replace(/<transmission[\s\S]*?<\/transmission>/g, '');
+}
 
 export interface UseRobotLoaderOptions {
     urdfContent: string;
@@ -95,8 +102,6 @@ export function useRobotLoader({
 
                 // Check if content is MJCF (MuJoCo XML)
                 if (isMJCFContent(urdfContent)) {
-                    console.log('[RobotModel] Detected MJCF content, using MJCF loader');
-                    console.log('[RobotModel] Content snippet:', urdfContent.substring(0, 200));
                     robotModel = await loadMJCFToThreeJS(urdfContent, assets);
 
                     if (abortController.aborted) {
@@ -106,43 +111,25 @@ export function useRobotLoader({
                         return;
                     }
                 } else {
-                    console.log('[RobotModel] Detected Standard URDF content');
-                    console.log('[RobotModel] Content snippet:', urdfContent.substring(0, 200));
                     // Standard URDF loading
                     const urdfDir = '';
                     const manager = createLoadingManager(assets, urdfDir);
                     manager.onLoad = () => {
                         if (!abortController.aborted && isMountedRef.current) {
-                            console.log('[RobotModel] All assets loaded. Applying materials and updating view.');
 
                             // Apply URDF materials AFTER meshes are fully loaded
                             // This is critical because meshes load asynchronously
                             const materials = parseURDFMaterials(urdfContent);
                             applyURDFMaterials(robotModel!, materials);
 
+                            // Process capsule geometries after materials are applied
+                            processCapsuleGeometries(robotModel!, urdfContent);
+
                             // Re-run enhanceMaterials to ensure proper lighting on loaded meshes
                             enhanceMaterials(robotModel!);
 
                             // Re-offset to ground after meshes are loaded (bounds may have changed)
                             offsetRobotToGround(robotModel!);
-
-                            // Log final stats
-                            const box = new THREE.Box3().setFromObject(robotModel!);
-                            const size = box.getSize(new THREE.Vector3());
-                            let meshCount = 0;
-                            let visibleMeshCount = 0;
-                            robotModel!.traverse((c: any) => {
-                                if (c.isMesh) {
-                                    meshCount++;
-                                    if (c.visible) visibleMeshCount++;
-                                }
-                            });
-                            console.log(`[RobotModel] Final robot stats (at onLoad):`, {
-                                bounds: JSON.stringify({ size: size, min: box.min, max: box.max }),
-                                meshCount,
-                                visibleMeshCount,
-                                scale: robotModel!.scale
-                            });
 
                             setRobotVersion(v => v + 1);
                             invalidate();
@@ -154,7 +141,8 @@ export function useRobotLoader({
                     loader.loadMeshCb = createMeshLoader(assets, manager, urdfDir);
                     loader.packages = (pkg: string) => '';
 
-                    robotModel = loader.parse(urdfContent);
+                    const cleanContent = preprocessURDFForLoader(urdfContent);
+                    robotModel = loader.parse(cleanContent);
 
                     // Check if load was aborted (e.g., by StrictMode remount or urdfContent change)
                     if (abortController.aborted) {
@@ -171,6 +159,9 @@ export function useRobotLoader({
                     if (!isMJCFContent(urdfContent)) {
                         const materials = parseURDFMaterials(urdfContent);
                         applyURDFMaterials(robotModel, materials);
+
+                        // Process capsule geometries (urdf-loader doesn't support capsule natively)
+                        processCapsuleGeometries(robotModel, urdfContent);
                     }
 
                     // Offset robot so bottom is at ground level (Y=0)
@@ -257,28 +248,6 @@ export function useRobotLoader({
                         onRobotLoaded(robotModel);
                     }
 
-                    // Diagnostic: Check robot bounds and mesh count
-                    const box = new THREE.Box3().setFromObject(robotModel);
-                    const size = box.getSize(new THREE.Vector3());
-                    let meshCount = 0;
-                    let visibleMeshCount = 0;
-                    robotModel.traverse((c: any) => {
-                        if (c.isMesh) {
-                            meshCount++;
-                            if (c.visible) visibleMeshCount++;
-                        }
-                    });
-                    console.log(`[RobotModel] Loaded robot stats:`, {
-                        bounds: { size: size, min: box.min, max: box.max },
-                        meshCount,
-                        visibleMeshCount,
-                        position: robotModel.position
-                    });
-                    if (meshCount === 0) {
-                        console.warn('[RobotModel] No meshes found in loaded robot!');
-                    } else if (size.lengthSq() < 0.000001) {
-                        console.warn('[RobotModel] Robot bounds are effectively zero!');
-                    }
                 }
             } catch (err) {
                 if (!abortController.aborted && isMountedRef.current) {

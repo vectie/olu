@@ -3,7 +3,7 @@
  * Handles global side effects like keyboard shortcuts and selection cleanup
  */
 import { useEffect } from 'react';
-import { useRobotStore, useSelectionStore, useCanUndo, useCanRedo } from '@/store';
+import { useRobotStore, useSelectionStore, useCanUndo, useCanRedo, useUIStore } from '@/store';
 
 /**
  * Hook for keyboard shortcuts (undo/redo)
@@ -59,9 +59,44 @@ export function useSelectionCleanup() {
 }
 
 /**
+ * Hook to listen for system theme changes
+ */
+export function useSystemThemeListener() {
+  const theme = useUIStore((state) => state.theme);
+  const setTheme = useUIStore((state) => state.setTheme);
+
+  useEffect(() => {
+    if (theme !== 'system') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const handleChange = () => {
+      // Re-apply theme to update class based on new system preference
+      setTheme('system');
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme, setTheme]);
+}
+
+/**
+ * Hook to apply font size preference
+ */
+export function useFontSizeListener() {
+  const fontSize = useUIStore((state) => state.fontSize);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-font-size', fontSize);
+  }, [fontSize]);
+}
+
+/**
  * Combined hook for all app effects
  */
 export function useAppEffects() {
   useKeyboardShortcuts();
   useSelectionCleanup();
+  useSystemThemeListener();
+  useFontSizeListener();
 }

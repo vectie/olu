@@ -71,14 +71,27 @@ export const parseURDF = (xmlString: string): RobotState | null => {
 
   const parseVec3 = (str: string | null) => {
     if (!str) return { x: 0, y: 0, z: 0 };
-    const parts = str.trim().split(/\s+/).map(Number);
-    return { x: parts[0] || 0, y: parts[1] || 0, z: parts[2] || 0 };
+    const parts = str.trim().split(/\s+/).map(v => parseFloat(v));
+    const result = { 
+        x: isNaN(parts[0]) ? 0 : parts[0], 
+        y: isNaN(parts[1]) ? 0 : parts[1], 
+        z: isNaN(parts[2]) ? 0 : parts[2] 
+    };
+    // Debug logging for suspicious values (only if parsing failed resulted in NaNs)
+    if (isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+        console.warn(`[URDF] Suspicious Vec3 parsing: "${str}" ->`, result);
+    }
+    return result;
   };
 
   const parseRPY = (str: string | null) => {
     if (!str) return { r: 0, p: 0, y: 0 };
-    const parts = str.trim().split(/\s+/).map(Number);
-    return { r: parts[0] || 0, p: parts[1] || 0, y: parts[2] || 0 };
+    const parts = str.trim().split(/\s+/).map(v => parseFloat(v));
+    return { 
+        r: isNaN(parts[0]) ? 0 : parts[0], 
+        p: isNaN(parts[1]) ? 0 : parts[1], 
+        y: isNaN(parts[2]) ? 0 : parts[2] 
+    };
   };
 
   const parseGeometry = (geoEl: Element | null, defaultGeo: any) => {
@@ -113,9 +126,8 @@ export const parseURDF = (xmlString: string): RobotState | null => {
               }
           };
       } else if (capsule) {
-          // Map capsule to cylinder for visualization
           return {
-              type: GeometryType.CYLINDER,
+              type: GeometryType.CAPSULE,
               dimensions: {
                   x: parseFloat(capsule.getAttribute("radius") || "0.1"),
                   y: parseFloat(capsule.getAttribute("length") || "0.5"),
@@ -124,8 +136,8 @@ export const parseURDF = (xmlString: string): RobotState | null => {
           };
       } else if (mesh) {
           const filename = mesh.getAttribute("filename") || "";
-          // Extract just the filename from package paths like "package://robot/meshes/file.stl"
-          const cleanName = filename.split('/').pop() || "";
+          // Keep the full path so the mesh loader can resolve it using its advanced lookup logic
+          const cleanName = filename;
 
           // Parse scale attribute (supports "0.001 0.001 0.001" format with multiple spaces)
           const scaleAttr = mesh.getAttribute("scale");
@@ -199,7 +211,9 @@ export const parseURDF = (xmlString: string): RobotState | null => {
   });
 
   // 1. Parse Links
-  robotEl.querySelectorAll("link").forEach(linkEl => {
+  Array.from(robotEl.children).forEach(child => {
+      if (child.tagName !== 'link') return;
+      const linkEl = child;
       const linkName = linkEl.getAttribute("name");
       if (!linkName) return;
       const id = linkName; // Use name as ID for imported structure
@@ -343,14 +357,40 @@ export const parseURDF = (xmlString: string): RobotState | null => {
   });
 
   // 2. Parse Joints
-  robotEl.querySelectorAll("joint").forEach(jointEl => {
+  Array.from(robotEl.children).forEach(child => {
+      if (child.tagName !== 'joint') return;
+      const jointEl = child;
       const jointName = jointEl.getAttribute("name");
       if (!jointName) return;
       const id = jointName;
 
       const parentEl = jointEl.querySelector("parent");
       const childEl = jointEl.querySelector("child");
-      const originEl = jointEl.querySelector("origin");
+      let originEl = jointEl.querySelector("origin");
+      
+      // Fallback: iterate children if querySelector fails (robustness for some XML parsers)
+      if (!originEl) {
+        // Try children collection first
+        if (jointEl.children && jointEl.children.length > 0) {
+            for (let i = 0; i < jointEl.children.length; i++) {
+                if (jointEl.children[i].tagName === 'origin') {
+                    originEl = jointEl.children[i];
+                    break;
+                }
+            }
+        }
+        // Fallback to childNodes (for parsers that might not support children on Elements)
+        if (!originEl && jointEl.childNodes) {
+            for (let i = 0; i < jointEl.childNodes.length; i++) {
+                const node = jointEl.childNodes[i];
+                if (node.nodeType === 1 && (node as Element).tagName === 'origin') { // Node.ELEMENT_NODE
+                    originEl = node as Element;
+                    break;
+                }
+            }
+        }
+      }
+
       const axisEl = jointEl.querySelector("axis");
       const limitEl = jointEl.querySelector("limit");
       const dynamicsEl = jointEl.querySelector("dynamics");

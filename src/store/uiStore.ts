@@ -44,7 +44,7 @@ interface UIState {
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
 
-  // Theme (light/dark)
+  // Theme (light/dark/system)
   theme: Theme;
   setTheme: (theme: Theme) => void;
 
@@ -88,6 +88,18 @@ interface UIState {
   // OS detection
   os: 'mac' | 'win';
   setOs: (os: 'mac' | 'win') => void;
+
+  // Import warning
+  showImportWarning: boolean;
+  setShowImportWarning: (show: boolean) => void;
+
+  // Panel Sections (collapsed state)
+  panelSections: Record<string, boolean>;
+  setPanelSection: (section: string, collapsed: boolean) => void;
+
+  // Font Size Preference
+  fontSize: 'small' | 'medium' | 'large';
+  setFontSize: (size: 'small' | 'medium' | 'large') => void;
 }
 
 // Default values
@@ -146,11 +158,11 @@ const detectOs = (): 'mac' | 'win' => {
 const getSavedTheme = (): Theme => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('theme');
-    if (saved === 'dark' || saved === 'light') {
+    if (saved === 'dark' || saved === 'light' || saved === 'system') {
       return saved;
     }
   }
-  return 'light';
+  return 'system';
 };
 
 // Get saved sidebar state
@@ -173,6 +185,20 @@ const getSavedUiScale = (): number => {
   return 1.0;
 };
 
+// Helper to apply theme
+const applyTheme = (theme: Theme) => {
+  if (typeof window === 'undefined') return;
+  
+  const isDark = theme === 'dark' || 
+    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  if (isDark) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+};
+
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
@@ -183,12 +209,7 @@ export const useUIStore = create<UIState>()(
       // Theme
       theme: getSavedTheme(),
       setTheme: (theme) => {
-        // Update DOM
-        if (theme === 'dark') {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
+        applyTheme(theme);
         set({ theme });
       },
 
@@ -264,12 +285,26 @@ export const useUIStore = create<UIState>()(
 
       // Settings modal
       isSettingsOpen: false,
-      settingsPos: { x: 100, y: 100 },
+      settingsPos: { x: 0, y: 0 }, // Will be calculated on open
       openSettings: (pos) =>
-        set((state) => ({
-          isSettingsOpen: true,
-          settingsPos: pos || state.settingsPos,
-        })),
+        set((state) => {
+          let newPos = pos;
+          // Only calculate center if no pos provided AND current pos is default (0,0)
+          if (!newPos && state.settingsPos.x === 0 && state.settingsPos.y === 0) {
+             if (typeof window !== 'undefined') {
+                newPos = {
+                    x: Math.max(0, window.innerWidth / 2 - 160), // 320px width / 2
+                    y: Math.max(0, window.innerHeight / 2 - 200) // Approx height / 2
+                };
+             } else {
+                newPos = { x: 100, y: 100 };
+             }
+          }
+          return {
+            isSettingsOpen: true,
+            settingsPos: newPos || state.settingsPos,
+          };
+        }),
       closeSettings: () => set({ isSettingsOpen: false }),
       setSettingsPos: (pos) => set({ settingsPos: pos }),
 
@@ -280,6 +315,21 @@ export const useUIStore = create<UIState>()(
       // OS detection
       os: detectOs(),
       setOs: (os) => set({ os }),
+
+      // Import warning
+      showImportWarning: true,
+      setShowImportWarning: (show) => set({ showImportWarning: show }),
+
+      // Panel Sections
+      panelSections: {},
+      setPanelSection: (section, collapsed) => 
+        set((state) => ({
+          panelSections: { ...state.panelSections, [section]: collapsed }
+        })),
+
+      // Font Size
+      fontSize: 'medium',
+      setFontSize: (size) => set({ fontSize: size }),
     }),
     {
       name: 'urdf-studio-ui',
@@ -288,7 +338,16 @@ export const useUIStore = create<UIState>()(
         lang: state.lang,
         uiScale: state.uiScale,
         sidebar: state.sidebar,
+        showImportWarning: state.showImportWarning,
+        panelSections: state.panelSections,
+        fontSize: state.fontSize,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Re-apply theme on hydration
+        if (state) {
+          applyTheme(state.theme);
+        }
+      },
     }
   )
 );

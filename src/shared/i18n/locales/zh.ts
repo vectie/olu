@@ -100,11 +100,13 @@ export const zh: TranslationKeys = {
   box: "方块",
   cylinder: "圆柱体",
   sphere: "球体",
+  capsule: "胶囊体",
   mesh: "网格 (文件)",
   width: "宽度 (X)",
   depth: "深度 (Y)",
   height: "高度 (Z)",
   radius: "半径",
+  totalLength: "总长度",
 
   // Visualizer
   skeletonOptions: "骨架选项",
@@ -199,6 +201,8 @@ export const zh: TranslationKeys = {
 
   // 额外的 UI 元素
   gizmos: "辅助工具",
+  visuals: "可视化",
+  physics: "物理",
   size: "尺寸",
   resetJoints: "重置关节",
   expand: "展开",
@@ -220,4 +224,13 @@ export const zh: TranslationKeys = {
   copied: "已复制!",
   fileBrowser: "文件浏览",
   dropOrImport: "拖放或导入文件夹/ZIP",
+
+  // Measure Tool
+  measureTool: "测量工具",
+  measureInstruction1: "点击模型选择测量点",
+  measureInstruction2: "Esc 取消当前测量",
+  measureInstruction3: "Delete 删除上一个",
+  measuredCount: "已测量: {count} 个",
+  undo: "撤销",
+  clearAll: "全部清除",
 };
