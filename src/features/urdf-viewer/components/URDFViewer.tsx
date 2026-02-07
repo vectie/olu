@@ -111,6 +111,7 @@ export function URDFViewer({
 
 
     const [jointAngles, setJointAngles] = useState<Record<string, number>>({});
+    const jointAnglesRef = useRef<Record<string, number>>({});
     const [initialJointAngles, setInitialJointAngles] = useState<Record<string, number>>({});
     const [angleUnit, setAngleUnit] = useState<'rad' | 'deg'>('rad');
     const [activeJoint, setActiveJoint] = useState<string | null>(null);
@@ -122,16 +123,37 @@ export function URDFViewer({
     // Get effective theme (light/dark) handling 'system' preference
     const effectiveTheme = useEffectiveTheme();
 
+    // Sync jointAnglesRef with jointAngles state
+    useEffect(() => {
+        jointAnglesRef.current = jointAngles;
+    }, [jointAngles]);
+
     const handleRobotLoaded = useCallback((loadedRobot: any) => {
         setRobot(loadedRobot);
 
         if (loadedRobot.joints) {
-            const angles: Record<string, number> = {};
+            const currentAngles: Record<string, number> = {};
+            const defaultAngles: Record<string, number> = {};
+            const previousAngles = jointAnglesRef.current;
+
             Object.keys(loadedRobot.joints).forEach(name => {
-                angles[name] = loadedRobot.joints[name].angle || 0;
+                const defaultAngle = loadedRobot.joints[name].angle || 0;
+                defaultAngles[name] = defaultAngle;
+
+                // Preserve previous angle if it exists, otherwise use default
+                if (previousAngles && previousAngles[name] !== undefined) {
+                    currentAngles[name] = previousAngles[name];
+                    // Apply to the new robot instance immediately to prevent visual jump
+                    if (loadedRobot.joints[name].setJointValue) {
+                        loadedRobot.joints[name].setJointValue(previousAngles[name]);
+                    }
+                } else {
+                    currentAngles[name] = defaultAngle;
+                }
             });
-            setJointAngles(angles);
-            setInitialJointAngles(angles);
+            
+            setJointAngles(currentAngles);
+            setInitialJointAngles(defaultAngles);
         }
     }, []);
 
