@@ -68,6 +68,8 @@ export const zh: TranslationKeys = {
   meshLibrary: "网格库",
   upload: "上传 (.stl, .obj, .dae)",
   selected: "已选",
+  applyMesh: "应用",
+  meshHint: "单击预览，双击直接应用",
   inertial: "惯性参数",
   mass: "质量 (kg)",
   centerOfMass: "质心",
@@ -170,6 +172,7 @@ export const zh: TranslationKeys = {
   showCenterOfMass: "显示质心",
   showInertia: "显示惯量",
   jointControls: "关节控制",
+  joints: "关节",
   viewOptions: "视图选项",
   loadingRobot: "加载机器人中...",
   enterRobotName: "输入机器人名称...",
@@ -205,6 +208,8 @@ export const zh: TranslationKeys = {
   physics: "物理",
   size: "尺寸",
   resetJoints: "重置关节",
+  reset: "重置",
+  advanced: "高级",
   expand: "展开",
   collapse: "收起",
   close: "关闭",
@@ -233,4 +238,9 @@ export const zh: TranslationKeys = {
   measuredCount: "已测量: {count} 个",
   undo: "撤销",
   clearAll: "全部清除",
+
+  // Performance
+  performance: "性能监控",
+  showFPS: "显示帧数 (FPS)",
+  showMemory: "显示显卡占用",
 };

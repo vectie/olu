@@ -1,7 +1,10 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
+import * as THREE from 'three';
 import { RobotState, Theme } from '@/types';
 import { translations, Language } from '@/shared/i18n';
+import { useSelectionStore } from '@/store/selectionStore';
 
 // Hooks
 import {
@@ -17,6 +20,57 @@ import { SkeletonOptionsPanel, DetailOptionsPanel, HardwareOptionsPanel } from '
 import { RobotNode } from './nodes';
 import { JointTransformControls } from './controls';
 import { VisualizerCanvas } from './VisualizerCanvas';
+
+/**
+ * Traverse the scene graph, skipping subtrees marked as helpers or gizmos.
+ * This ensures only actual robot geometry is considered for bounding box calculations.
+ */
+function traverseRobotMeshes(obj: THREE.Object3D, callback: (mesh: THREE.Mesh) => void) {
+  if (obj.userData?.isHelper || obj.userData?.isGizmo || obj.name?.startsWith('__')) return;
+  if ((obj as THREE.Mesh).isMesh) {
+    callback(obj as THREE.Mesh);
+  }
+  for (const child of obj.children) {
+    traverseRobotMeshes(child, callback);
+  }
+}
+
+/**
+ * GroundedGroup - Offsets child robot so its bottom sits at ground level (Z=0).
+ * Uses Z-up convention matching the Visualizer's camera and grid setup.
+ * Only considers actual robot geometry meshes (skips helper visualizations like
+ * joint axes, coordinate frames, inertia boxes, etc.) so that scaling up helpers
+ * does not shift the ground plane.
+ */
+function GroundedGroup({ children }: { children: React.ReactNode }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(() => {
+    const group = groupRef.current;
+    if (!group) return;
+
+    group.updateMatrixWorld(true);
+
+    const box = new THREE.Box3();
+    traverseRobotMeshes(group, (mesh) => {
+      if (mesh.geometry) {
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        const geomBox = mesh.geometry.boundingBox!.clone();
+        geomBox.applyMatrix4(mesh.matrixWorld);
+        box.union(geomBox);
+      }
+    });
+
+    if (!box.isEmpty()) {
+      const minZ = box.min.z;
+      if (isFinite(minZ) && Math.abs(minZ) > 0.001) {
+        group.position.z -= minZ;
+      }
+    }
+  });
+
+  return <group ref={groupRef}>{children}</group>;
+}
 
 // Props interface
 interface VisualizerProps {
@@ -58,6 +112,7 @@ export const Visualizer = ({
   setShowOptionsPanel,
 }: VisualizerProps) => {
   const t = translations[lang];
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
 
   // Use custom hooks for state management
   const state = useVisualizerState({ propShowVisual, propSetShowVisual });
@@ -201,9 +256,10 @@ export const Visualizer = ({
         theme={theme}
         snapshotAction={snapshotAction}
         robotName={robot?.name || 'robot'}
+        onPointerMissed={clearSelection}
       >
-        {/* Robot Hierarchy */}
-        <group position={[0, 0, 0]}>
+        {/* Robot Hierarchy - GroundedGroup offsets robot so bottom sits at Z=0 */}
+        <GroundedGroup>
           <RobotNode
             linkId={robot.rootLinkId}
             robot={robot}
@@ -232,7 +288,7 @@ export const Visualizer = ({
             onRegisterJointPivot={handleRegisterJointPivot}
             onRegisterCollisionRef={handleRegisterCollisionRef}
           />
-        </group>
+        </GroundedGroup>
 
         {/* Joint Transform Controls (Skeleton Mode) */}
         <JointTransformControls

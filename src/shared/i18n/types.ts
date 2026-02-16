@@ -68,6 +68,8 @@ export interface TranslationKeys {
   meshLibrary: string;
   upload: string;
   selected: string;
+  applyMesh: string;
+  meshHint: string;
   inertial: string;
   mass: string;
   centerOfMass: string;
@@ -199,6 +201,8 @@ export interface TranslationKeys {
   gizmos: string;
   size: string;
   resetJoints: string;
+  reset: string;
+  advanced: string;
   expand: string;
   collapse: string;
   close: string;
@@ -227,6 +231,11 @@ export interface TranslationKeys {
   measuredCount: string;
   undo: string;
   clearAll: string;
+
+  // Performance
+  performance: string;
+  showFPS: string;
+  showMemory: string;
 }
 
 export type Translations = Record<Language, TranslationKeys>;
